@@ -8,7 +8,11 @@ const num = (n: number) => Number(n.toFixed(6)).toString();
 export function tripToGpx(trip: Trip): string {
   const out: string[] = ['<?xml version="1.0" encoding="UTF-8"?>'];
   out.push('<gpx version="1.1" creator="Trails" xmlns="http://www.topografix.com/GPX/1/1">');
-  out.push(`  <metadata><name>${esc(trip.name)}</name>${trip.description ? `<desc>${esc(trip.description)}</desc>` : ""}<time>${trip.updatedAt}</time></metadata>`);
+  out.push(
+    `  <metadata><name>${esc(trip.name)}</name>${trip.description ? `<desc>${esc(trip.description)}</desc>` : ""}` +
+      '<copyright author="OpenStreetMap contributors"><license>https://www.openstreetmap.org/copyright</license></copyright>' +
+      `<time>${trip.updatedAt}</time></metadata>`,
+  );
   for (const w of trip.waypoints) {
     out.push(`  <wpt lat="${num(w.lat)}" lon="${num(w.lng)}"><time>${w.createdAt}</time><name>${esc(w.name)}</name>${w.description ? `<desc>${esc(w.description)}</desc>` : ""}<type>${esc(w.category)}</type></wpt>`);
   }

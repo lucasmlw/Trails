@@ -19,6 +19,8 @@ export function tripToGpx(trip: Trip): string {
   lines.push("  <metadata>");
   lines.push(`    <name>${esc(trip.name)}</name>`);
   if (trip.description) lines.push(`    <desc>${esc(trip.description)}</desc>`);
+  // Route geometry is derived from OpenStreetMap data (ODbL); keep the notice with the export.
+  lines.push('    <copyright author="OpenStreetMap contributors"><license>https://www.openstreetmap.org/copyright</license></copyright>');
   lines.push(`    <time>${trip.updatedAt}</time>`);
   lines.push("  </metadata>");
 

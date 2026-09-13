@@ -49,6 +49,8 @@ export async function downloadTrip(req: DownloadRequest, onProgress: (p: Downloa
   };
   await putDownload(meta);
   onProgress({ ...progress });
+  // Ask the browser not to evict our data under storage pressure; granted silently for installed PWAs.
+  if (navigator.storage?.persist) await navigator.storage.persist().catch(() => false);
 
   const checkCancelled = () => {
     if (signal.aborted) throw new DOMException("cancelled", "AbortError");
