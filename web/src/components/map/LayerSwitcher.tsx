@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useConfig } from "../../store/config";
 
 export function LayerSwitcher() {
-  const layers = useConfig((s) => s.config.mapLayers.filter((l) => l.kind === "base"));
+  const allLayers = useConfig((s) => s.config.mapLayers);
+  const layers = useMemo(() => allLayers.filter((l) => l.kind === "base"), [allLayers]);
   const active = useConfig((s) => s.activeLayerId);
   const setActive = useConfig((s) => s.setActiveLayer);
   const [open, setOpen] = useState(false);

@@ -6,7 +6,9 @@ import { nearestPointOnLine } from "../../lib/geo";
 import { useMap } from "./MapView";
 
 const SRC_LINE = "route", SRC_POINTS = "route-points", SRC_HOVER = "route-hover";
-const L_CASING = "route-casing", L_LINE = "route-line", L_POINTS_HALO = "route-points-halo", L_POINTS = "route-points", L_HOVER = "route-hover";
+const L_CASING = "route-casing", L_LINE = "route-line", L_LINE_DASHED = "route-line-dashed", L_HIT = "route-hit", L_POINTS_HALO = "route-points-halo", L_POINTS = "route-points", L_HOVER = "route-hover";
+// Interaction is bound to a wide transparent copy of the line so it is easy to grab with a mouse or finger.
+const LINE_LAYERS = [L_HIT];
 
 function segmentsToGeoJSON(points: LngLat[], segments: (RouteSegment | null)[]): GeoJSON.FeatureCollection {
   return {
@@ -43,16 +45,33 @@ function ensureLayers(map: maplibregl.Map) {
     layout: { "line-cap": "round", "line-join": "round" },
     paint: { "line-color": "#ffffff", "line-width": 8, "line-opacity": 0.85 },
   });
+  // line-dasharray cannot be data-driven, so routed and provisional segments are separate layers.
   map.addLayer({
     id: L_LINE,
     type: "line",
     source: SRC_LINE,
+    filter: ["all", ["!", ["get", "loading"]], ["!", ["get", "straight"]]],
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: { "line-color": "#ff7a00", "line-width": 4.5 },
+  });
+  map.addLayer({
+    id: L_LINE_DASHED,
+    type: "line",
+    source: SRC_LINE,
+    filter: ["any", ["get", "loading"], ["get", "straight"]],
     layout: { "line-cap": "round", "line-join": "round" },
     paint: {
-      "line-color": ["case", ["get", "loading"], "#b3b3b3", ["get", "straight"], "#d94a4a", "#ff7a00"],
+      "line-color": ["case", ["get", "loading"], "#b3b3b3", "#d94a4a"],
       "line-width": 4.5,
-      "line-dasharray": ["case", ["any", ["get", "loading"], ["get", "straight"]], ["literal", [1.5, 1.5]], ["literal", [1, 0]]],
+      "line-dasharray": [1.5, 1.5],
     },
+  });
+  map.addLayer({
+    id: L_HIT,
+    type: "line",
+    source: SRC_LINE,
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: { "line-color": "#000000", "line-width": 22, "line-opacity": 0 },
   });
   map.addLayer({
     id: L_POINTS_HALO,
@@ -65,7 +84,7 @@ function ensureLayers(map: maplibregl.Map) {
     type: "circle",
     source: SRC_POINTS,
     paint: {
-      "circle-radius": ["match", ["get", "kind"], "via", 5.5, 7],
+      "circle-radius": ["match", ["get", "kind"], "via", 6, 7.5],
       "circle-color": ["match", ["get", "kind"], "start", "#2ecc71", "end", "#e74c3c", "#ff7a00"],
       "circle-stroke-color": "#1b1b1b",
       "circle-stroke-width": 1,
@@ -211,7 +230,7 @@ export function RouteEditorLayer({ editable, highlight }: EditorProps) {
         popup = null;
         return;
       }
-      const hits = map.queryRenderedFeatures(e.point, { layers: [L_POINTS, L_LINE, "waypoints"].filter((l) => map.getLayer(l)) });
+      const hits = map.queryRenderedFeatures(e.point, { layers: [L_POINTS, ...LINE_LAYERS].filter((l) => map.getLayer(l)) });
       if (hits.length) return;
       store.getState().addPoint(lngLatOf(e));
     };
@@ -254,8 +273,12 @@ export function RouteEditorLayer({ editable, highlight }: EditorProps) {
 
     map.on("mousedown", L_POINTS, onPointDown);
     map.on("touchstart", L_POINTS, onPointDown);
-    map.on("mousedown", L_LINE, onLineDown);
-    map.on("touchstart", L_LINE, onLineDown);
+    for (const l of LINE_LAYERS) {
+      map.on("mousedown", l, onLineDown);
+      map.on("touchstart", l, onLineDown);
+      map.on("mouseenter", l, onLineEnter);
+      map.on("mouseleave", l, onLineLeave);
+    }
     map.on("mousemove", onMove);
     map.on("touchmove", onMove);
     map.on("mouseup", endDrag);
@@ -263,8 +286,6 @@ export function RouteEditorLayer({ editable, highlight }: EditorProps) {
     map.on("touchcancel", endDrag);
     map.on("click", onMapClick);
     map.on("click", L_POINTS, onPointClick);
-    map.on("mouseenter", L_LINE, onLineEnter);
-    map.on("mouseleave", L_LINE, onLineLeave);
     map.on("mouseenter", L_POINTS, onPointEnter);
     map.on("mouseleave", L_POINTS, setCursor);
     setCursor();
@@ -272,8 +293,12 @@ export function RouteEditorLayer({ editable, highlight }: EditorProps) {
     return () => {
       map.off("mousedown", L_POINTS, onPointDown);
       map.off("touchstart", L_POINTS, onPointDown);
-      map.off("mousedown", L_LINE, onLineDown);
-      map.off("touchstart", L_LINE, onLineDown);
+      for (const l of LINE_LAYERS) {
+        map.off("mousedown", l, onLineDown);
+        map.off("touchstart", l, onLineDown);
+        map.off("mouseenter", l, onLineEnter);
+        map.off("mouseleave", l, onLineLeave);
+      }
       map.off("mousemove", onMove);
       map.off("touchmove", onMove);
       map.off("mouseup", endDrag);
@@ -281,8 +306,6 @@ export function RouteEditorLayer({ editable, highlight }: EditorProps) {
       map.off("touchcancel", endDrag);
       map.off("click", onMapClick);
       map.off("click", L_POINTS, onPointClick);
-      map.off("mouseenter", L_LINE, onLineEnter);
-      map.off("mouseleave", L_LINE, onLineLeave);
       map.off("mouseenter", L_POINTS, onPointEnter);
       map.off("mouseleave", L_POINTS, setCursor);
       popup?.remove();
