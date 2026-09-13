@@ -50,6 +50,12 @@ export function setUnauthorizedHandler(fn: () => void) {
   onUnauthorized = fn;
 }
 
+/** Reachability callback: true after any successful request, false after a network failure. */
+let onReachability: ((online: boolean) => void) | null = null;
+export function setReachabilityHandler(fn: (online: boolean) => void) {
+  onReachability = fn;
+}
+
 export async function api<T>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {
   const headers: Record<string, string> = { ...authHeaders(), ...((init.headers as Record<string, string>) ?? {}) };
   let body = init.body;
@@ -61,8 +67,10 @@ export async function api<T>(path: string, init: RequestInit & { json?: unknown 
   try {
     res = await fetch(apiBase() + path, { ...init, headers, body, credentials: "include" });
   } catch {
+    onReachability?.(false);
     throw new OfflineError();
   }
+  onReachability?.(true);
   if (res.status === 401 && !path.startsWith("/api/auth/login")) {
     onUnauthorized?.();
   }

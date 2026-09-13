@@ -1,11 +1,14 @@
 import { useMemo } from "react";
-import { ROUTING_MODES, type LngLat, type RoutingMode } from "@trails/shared";
+import { ROUTING_MODES, type LngLat, type RoutingMode, type Track } from "@trails/shared";
 import { useRouteEditor } from "../../store/routeEditor";
+import { useTrip } from "../../store/trip";
 import { computeStats, routeCoordinates, straightSegment } from "../../lib/geo";
+import { formatDistance, formatDuration } from "../../lib/format";
 import { RouteStats } from "../route/RouteStats";
 import { ElevationProfile } from "../route/ElevationProfile";
 
 interface Props {
+  tracks: Track[];
   canEdit: boolean;
   saving: boolean;
   onSave: () => void;
@@ -16,8 +19,9 @@ interface Props {
   offline: boolean;
 }
 
-export function RoutePanel({ canEdit, saving, onSave, onCancel, onHover, onExportGpx, onNavigate, offline }: Props) {
+export function RoutePanel({ tracks, canEdit, saving, onSave, onCancel, onHover, onExportGpx, onNavigate, offline }: Props) {
   const editor = useRouteEditor();
+  const deleteTrack = useTrip((s) => s.deleteTrack);
   const { points, segments, mode, busy, error, dirty, past, future } = editor;
 
   const complete = useMemo(() => segments.map((s, i) => s ?? straightSegment(mode, points[i], points[i + 1])), [segments, points, mode]);
@@ -108,6 +112,33 @@ export function RoutePanel({ canEdit, saving, onSave, onCancel, onHover, onExpor
           <ElevationProfile coordinates={coords} onHover={onHover} />
           <div className="tiny muted mt">
             {points.length} routing point{points.length === 1 ? "" : "s"} · {ROUTING_MODES.find((m) => m.id === mode)?.label}
+          </div>
+        </>
+      )}
+
+      {tracks.length > 0 && (
+        <>
+          <h3>Recorded tracks</h3>
+          <div className="list">
+            {tracks.map((t) => {
+              const secs = t.endedAt ? (new Date(t.endedAt).getTime() - new Date(t.startedAt).getTime()) / 1000 : null;
+              return (
+                <div className="list-item" key={t.id}>
+                  <span style={{ width: 10, height: 10, borderRadius: 5, background: "var(--track)", flexShrink: 0 }} />
+                  <div className="grow" style={{ minWidth: 0 }}>
+                    <div className="truncate small">{t.name}</div>
+                    <div className="tiny muted">
+                      {formatDistance(t.distance)} · {t.points.length} pts{secs != null && ` · ${formatDuration(secs)}`}
+                    </div>
+                  </div>
+                  {canEdit && (
+                    <button className="ghost small" title="Delete track" disabled={offline} onClick={() => confirm(`Delete "${t.name}"?`) && void deleteTrack(t.id)}>
+                      ✕
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </>
       )}

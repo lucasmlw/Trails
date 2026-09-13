@@ -90,6 +90,7 @@ export function MapView({ center, zoom, bounds, children, className, onMoveEnd, 
       touchPitch: false,
     });
     m.touchZoomRotate.disableRotation();
+    if (import.meta.env.DEV) (window as unknown as { __trailsMap?: maplibregl.Map }).__trailsMap = m;
     m.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
     m.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
     m.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");

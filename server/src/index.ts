@@ -49,20 +49,20 @@ app.use("/api", externalRouter);
 app.use("/api", (_req, res) => res.status(404).json({ error: "Not found" }));
 
 // Serve the built web app (single page application) when present.
-if (fs.existsSync(env.webDist)) {
-  app.use(
-    express.static(env.webDist, {
-      setHeaders(res, filePath) {
-        if (filePath.endsWith("sw.js") || filePath.endsWith("index.html") || filePath.endsWith("manifest.webmanifest")) {
-          res.setHeader("Cache-Control", "no-cache");
-        }
-      },
-    }),
-  );
-  app.get("*", (_req, res) => res.sendFile(path.join(env.webDist, "index.html")));
-} else {
-  app.get("/", (_req, res) => res.send("Trails API is running. Build the web app (npm run build) or run the Vite dev server."));
-}
+app.use(
+  express.static(env.webDist, {
+    setHeaders(res, filePath) {
+      if (filePath.endsWith("sw.js") || filePath.endsWith("index.html") || filePath.endsWith("manifest.webmanifest")) {
+        res.setHeader("Cache-Control", "no-cache");
+      }
+    },
+  }),
+);
+app.get("*", (_req, res) => {
+  const index = path.join(env.webDist, "index.html");
+  if (fs.existsSync(index)) res.sendFile(index);
+  else res.status(503).send("Trails API is running. Build the web app (npm run build) or use the Vite dev server on port 5173.");
+});
 
 app.use((err: Error & { status?: number }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);

@@ -411,6 +411,7 @@ label {
   display: grid;
   grid-template-columns: 400px 1fr;
   min-height: 0;
+  min-width: 0;
 }
 .side-panel {
   background: var(--panel);
@@ -418,6 +419,8 @@ label {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 .tabs {
   display: flex;
@@ -446,8 +449,13 @@ label {
 }
 .panel-body {
   flex: 1;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 14px;
+  min-width: 0;
+}
+.map-area {
+  min-width: 0;
 }
 .panel-body h2 {
   font-size: 16px;
@@ -999,7 +1007,10 @@ kbd {
     min-height: 45vh;
   }
   .search-box {
-    width: 240px;
+    width: 220px;
+  }
+  .layer-label {
+    display: none;
   }
   .nav-stats {
     grid-template-columns: repeat(3, 1fr);

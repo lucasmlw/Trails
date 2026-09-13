@@ -22,7 +22,7 @@ export function LayerSwitcher() {
   return (
     <div ref={ref} style={{ position: "relative" }}>
       <button className="floating" onClick={() => setOpen((o) => !o)} title="Map layers" aria-haspopup="menu" aria-expanded={open}>
-        <LayersIcon /> {current?.name ?? "Layers"}
+        <LayersIcon /> <span className="layer-label">{current?.name ?? "Layers"}</span>
       </button>
       {open && (
         <div className="floating layer-menu" role="menu" style={{ position: "absolute", right: 0, top: "calc(100% + 6px)" }}>

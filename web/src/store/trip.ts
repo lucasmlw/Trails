@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { RouteData, Trip, WaypointCategory } from "@trails/shared";
 import { api, ApiError, OfflineError } from "../api/client";
 import { loadTrip, tripRepo } from "../offline/tripRepo";
+import { getStoredTrip, putStoredTrip } from "../offline/db";
 import { useNetwork } from "./network";
 import { toast } from "./toast";
 
@@ -22,6 +23,7 @@ interface TripState {
   updateChecklistItem: (id: string, patch: { text?: string; completed?: boolean }) => Promise<void>;
   deleteChecklistItem: (id: string) => Promise<void>;
   reorderChecklist: (ids: string[]) => Promise<void>;
+  deleteTrack: (trackId: string) => Promise<void>;
   share: (userId: string, permission: "view" | "edit") => Promise<void>;
   unshare: (userId: string) => Promise<void>;
   setTrip: (trip: Trip) => void;
@@ -115,6 +117,21 @@ export const useTrip = create<TripState>((set, get) => {
 
     deleteChecklistItem: (id) => run((trip) => tripRepo.deleteChecklistItem(trip, id)),
     reorderChecklist: (ids) => run((trip) => tripRepo.reorderChecklist(trip, ids)),
+
+    async deleteTrack(trackId) {
+      const trip = get().trip;
+      if (!trip) return;
+      try {
+        const res = await api<{ tracks: Trip["tracks"] }>(`/api/trips/${trip.id}/tracks/${trackId}`, { method: "DELETE" });
+        const updated = { ...trip, tracks: res.tracks };
+        set({ trip: updated });
+        const stored = await getStoredTrip(trip.id);
+        if (stored) await putStoredTrip(updated, stored.dirty);
+        toast("Track deleted", "success");
+      } catch (err) {
+        toast(describe(err), "error");
+      }
+    },
 
     async share(userId, permission) {
       const trip = get().trip;

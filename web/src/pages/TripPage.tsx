@@ -258,6 +258,7 @@ export function TripPage() {
           <div className="panel-body">
             {tab === "route" && (
               <RoutePanel
+                tracks={trip.tracks}
                 canEdit={canEdit}
                 saving={saving}
                 onSave={onSaveRoute}
