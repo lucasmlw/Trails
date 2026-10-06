@@ -8,6 +8,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { TripPage } from "./pages/TripPage";
 import { NavigationPage } from "./pages/NavigationPage";
+import { ErrorBoundary, RecoveryScreen } from "./components/RecoveryScreen";
 
 function RequireAuth({ children }: { children: React.ReactElement }) {
   const status = useAuth((s) => s.status);
@@ -52,36 +53,39 @@ export default function App() {
   }, [status, loadConfig]);
 
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route
-          path="/"
-          element={
-            <RequireAuth>
-              <DashboardPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/trips/:id"
-          element={
-            <RequireAuth>
-              <TripPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/trips/:id/navigate"
-          element={
-            <RequireAuth>
-              <NavigationPage />
-            </RequireAuth>
-          }
-        />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-      <Toasts />
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/reset" element={<RecoveryScreen />} />
+          <Route
+            path="/"
+            element={
+              <RequireAuth>
+                <DashboardPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/trips/:id"
+            element={
+              <RequireAuth>
+                <TripPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/trips/:id/navigate"
+            element={
+              <RequireAuth>
+                <NavigationPage />
+              </RequireAuth>
+            }
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+        <Toasts />
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }

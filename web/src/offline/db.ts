@@ -102,9 +102,21 @@ export function getDb() {
         const tracks = db.createObjectStore("tracks", { keyPath: "id" });
         tracks.createIndex("byTrip", "tripId");
       },
+      // Another tab (or the recovery screen) wants to delete/upgrade the database: let go of it.
+      blocking(_cur, _blocked, event) {
+        (event.target as IDBDatabase).close();
+        dbPromise = null;
+      },
     });
   }
   return dbPromise;
+}
+
+/** Closes this page's connection so the database can be deleted or upgraded. */
+export async function closeDb() {
+  const p = dbPromise;
+  dbPromise = null;
+  if (p) (await p.catch(() => null))?.close();
 }
 
 // ---- trips ----
