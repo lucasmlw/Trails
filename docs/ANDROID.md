@@ -77,6 +77,24 @@ The recorder already writes the in‑progress track to IndexedDB every 15 s and 
 
 Rebuild the web app, run `npm run cap:sync -w web`, and reinstall from Android Studio (or `./gradlew assembleRelease` in `web/android` for a signed release APK). The native shell rarely needs to change; most updates are web‑only.
 
+## Downloading a trip on the phone
+
+* Do it on Wi‑Fi with the phone plugged in or well charged, and **leave the app in the foreground until the progress bar finishes**. The app asks Android to keep the screen on while it downloads, but if you switch apps or lock the phone Android may suspend the page and the download stops.
+* Start with the defaults (*Route + 1.5 km*, zoom 15). A typical day walk is a few hundred tiles and 10–40 MB. Only increase the area or zoom once that has worked.
+* If the download is interrupted, the Offline tab shows **Download interrupted** with how many tiles were kept, and a **Resume download** button. Resuming only fetches the missing tiles.
+* The *Free storage* figure comes from the browser. If it reports very little, Chrome → Settings → Site settings → Storage lets you free space from other sites.
+
+## If the app will not open (recovery)
+
+The server copy of your trips is never affected by anything on the phone; the steps below only clear what is stored on the device.
+
+1. **Reload.** Close the app fully (swipe it away from recents) and open it again. If it shows a *Something went wrong* screen, press **Reload**.
+2. **Reset from inside the app.** Open `https://<your server>/reset` in the browser (or in the APK, tap *Reset this device* on the error screen). This deletes the offline maps, local photos and any unsynced edits on the phone, signs you out, and reloads. Log in again, and the trip is back from the server.
+3. **Clear the storage from Android** if even that page won't load:
+   * PWA: Chrome → ⋮ → Settings → Site settings → All sites → your server address → *Clear & reset*. (Or long‑press the home‑screen icon → App info → Storage → *Clear storage*.)
+   * APK: Settings → Apps → Trails → Storage → *Clear storage*.
+4. Open the app, log in, and download the trip again with a smaller area or lower zoom.
+
 ## Photos on Android
 
 The waypoint photo picker uses `<input type="file" accept="image/*" capture="environment">`, which Android renders as *Camera / Gallery* in both the PWA and the Capacitor shell. Images are downscaled client‑side to ≤ 1600 px (plus a 240 px thumbnail) and re‑encoded as JPEG before upload to keep uploads small on mobile data. Photos taken while offline are stored locally and uploaded with the next sync.
