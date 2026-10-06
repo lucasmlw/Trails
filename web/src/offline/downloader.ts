@@ -1,18 +1,31 @@
 import type { MapLayerConfig, Trip } from "@trails/shared";
 import type { BBox } from "../lib/geo";
 import { fetchBlob } from "../api/client";
-import { getStoredPhoto, putDownload, putStoredPhoto, putStoredTrip, putTile, type DownloadMeta } from "./db";
+import { requestWakeLock } from "../location/provider";
+import { getStoredPhoto, getTile, putDownload, putStoredPhoto, putStoredTrip, putTile, type DownloadMeta } from "./db";
 import { countTiles, fetchTile, tileKey, tilesInBBox } from "./tiles";
 
 export interface DownloadProgress {
   phase: "trip" | "photos" | "tiles" | "done" | "failed" | "cancelled";
   tilesDone: number;
   tilesTotal: number;
+  /** tiles that were already on the device (resumed or shared with another trip) */
+  tilesSkipped: number;
   photosDone: number;
   photosTotal: number;
   bytes: number;
   failed: number;
   message?: string;
+}
+
+const isQuotaError = (err: unknown) =>
+  err instanceof DOMException && (err.name === "QuotaExceededError" || err.name === "NS_ERROR_DOM_QUOTA_REACHED");
+
+/** Phones have less memory and slower storage; keep fewer tile requests in flight there. */
+function tileConcurrency(): number {
+  const coarse = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+  const cores = navigator.hardwareConcurrency ?? 4;
+  return coarse || cores <= 4 ? 3 : 6;
 }
 
 export interface DownloadRequest {
@@ -32,7 +45,7 @@ export async function downloadTrip(req: DownloadRequest, onProgress: (p: Downloa
   const { trip, layers, bbox, minZoom, maxZoom } = req;
   const tilesTotal = layers.reduce((n, l) => n + countTiles(bbox, Math.max(minZoom, l.minZoom), Math.min(maxZoom, l.maxZoom)), 0);
   const photos = trip.waypoints.flatMap((w) => w.photos.map((p) => ({ ...p, tripId: trip.id })));
-  const progress: DownloadProgress = { phase: "trip", tilesDone: 0, tilesTotal, photosDone: 0, photosTotal: photos.length, bytes: 0, failed: 0 };
+  const progress: DownloadProgress = { phase: "trip", tilesDone: 0, tilesTotal, tilesSkipped: 0, photosDone: 0, photosTotal: photos.length, bytes: 0, failed: 0 };
   const meta: DownloadMeta = {
     tripId: trip.id,
     layerIds: layers.map((l) => l.id),
@@ -56,6 +69,9 @@ export async function downloadTrip(req: DownloadRequest, onProgress: (p: Downloa
     if (signal.aborted) throw new DOMException("cancelled", "AbortError");
   };
 
+  // Phones switch the screen off and suspend the page mid-download; keep it awake while we work.
+  const releaseWakeLock = await requestWakeLock();
+
   try {
     await putStoredTrip(trip, false);
     checkCancelled();
@@ -68,7 +84,8 @@ export async function downloadTrip(req: DownloadRequest, onProgress: (p: Downloa
           const [blob, thumb] = await Promise.all([fetchBlob(p.url), fetchBlob(p.thumbnailUrl)]);
           await putStoredPhoto({ id: p.id, waypointId: p.waypointId, tripId: trip.id, blob, thumb, mimeType: blob.type || "image/jpeg" });
           progress.bytes += blob.size + thumb.size;
-        } catch {
+        } catch (err) {
+          if (isQuotaError(err)) throw new Error("Not enough storage available to download this map.");
           progress.failed++;
         }
       }
@@ -86,27 +103,43 @@ export async function downloadTrip(req: DownloadRequest, onProgress: (p: Downloa
     // Low zooms first so the map is usable even if the download is interrupted.
     queue.sort((a, b) => a.z - b.z);
 
-    const concurrency = 6;
+    const concurrency = tileConcurrency();
     let index = 0;
     let lastFlush = Date.now();
+    let lastMetaFlush = Date.now();
     const worker = async () => {
       while (index < queue.length) {
         checkCancelled();
         const item = queue[index++];
         const key = tileKey(item.layer.id, item);
         try {
-          const blob = await fetchTile(item.layer, item, signal);
-          const fresh = await putTile({ key, layerId: item.layer.id, tripIds: [trip.id], blob, bytes: blob.size });
-          if (fresh) progress.bytes += blob.size;
+          // Already on the device (interrupted earlier, or shared with another trip): don't fetch again.
+          const existing = await getTile(key);
+          if (existing) {
+            if (!existing.tripIds.includes(trip.id)) await putTile({ ...existing, tripIds: [trip.id] });
+            progress.tilesSkipped++;
+          } else {
+            const blob = await fetchTile(item.layer, item, signal);
+            const fresh = await putTile({ key, layerId: item.layer.id, tripIds: [trip.id], blob, bytes: blob.size });
+            if (fresh) progress.bytes += blob.size;
+          }
           meta.tilesStored++;
         } catch (err) {
           if ((err as Error).name === "AbortError") throw err;
+          if (isQuotaError(err)) throw new Error("Not enough storage available to download this map.");
           progress.failed++;
         }
         progress.tilesDone++;
-        if (Date.now() - lastFlush > 150 || progress.tilesDone === tilesTotal) {
-          lastFlush = Date.now();
+        const now = Date.now();
+        if (now - lastFlush > 150 || progress.tilesDone === tilesTotal) {
+          lastFlush = now;
           onProgress({ ...progress });
+        }
+        // Persist partial progress so an interrupted download can report what it kept.
+        if (now - lastMetaFlush > 2000) {
+          lastMetaFlush = now;
+          meta.bytes = progress.bytes;
+          await putDownload({ ...meta });
         }
       }
     };
@@ -129,5 +162,7 @@ export async function downloadTrip(req: DownloadRequest, onProgress: (p: Downloa
     progress.message = meta.error;
     onProgress({ ...progress });
     return meta;
+  } finally {
+    releaseWakeLock();
   }
 }

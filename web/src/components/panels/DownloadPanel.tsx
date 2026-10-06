@@ -19,7 +19,7 @@ interface Props {
 const AREA_SRC = "download-area";
 
 function drawArea(map: maplibregl.Map | null, bbox: BBox | null) {
-  if (!map) return;
+  if (!map || !map.getStyle()) return; // map may already be torn down during unmount
   const data: GeoJSON.FeatureCollection = {
     type: "FeatureCollection",
     features: bbox
@@ -105,8 +105,23 @@ export function DownloadPanel({ trip, map, online, onDownloadsChanged }: Props) 
     return { tiles, bytes };
   }, [bbox, selectedLayers, maxZoom, minZoom]);
 
-  const tooLarge = estimate.tiles > 25_000;
+  // Phones have less memory and slower storage; keep single downloads smaller there.
+  const mobile = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+  const tooLarge = estimate.tiles > (mobile ? 10_000 : 25_000);
   const insufficient = storage ? storage.quota - storage.usage < estimate.bytes * 1.2 : false;
+
+  // A download left in "downloading" with nothing running here was cut short (app closed, screen off).
+  const interrupted = existing?.status === "downloading" && !progress;
+
+  const run = async (req: { layers: MapLayerConfig[]; bbox: BBox; minZoom: number; maxZoom: number }) => {
+    abortRef.current = new AbortController();
+    const meta = await downloadTrip({ trip, ...req }, setProgress, abortRef.current.signal);
+    if (meta.status === "complete") toast("Trip downloaded for offline use", "success");
+    else if (meta.status === "failed") toast(`Download failed: ${meta.error}`, "error", 8000);
+    setProgress(null);
+    await refresh();
+    onDownloadsChanged?.();
+  };
 
   const start = async () => {
     if (!bbox) return;
@@ -114,13 +129,15 @@ export function DownloadPanel({ trip, map, online, onDownloadsChanged }: Props) 
       toast("Not enough storage available to download this map.", "error", 6000);
       return;
     }
-    abortRef.current = new AbortController();
-    const meta = await downloadTrip({ trip, layers: selectedLayers, bbox, minZoom, maxZoom }, setProgress, abortRef.current.signal);
-    if (meta.status === "complete") toast("Trip downloaded for offline use", "success");
-    else if (meta.status === "failed") toast(`Download failed: ${meta.error}`, "error", 8000);
-    setProgress(null);
-    await refresh();
-    onDownloadsChanged?.();
+    await run({ layers: selectedLayers, bbox, minZoom, maxZoom });
+  };
+
+  // Resume with the original area/zoom/layers; tiles already on the device are skipped.
+  const resume = async () => {
+    if (!existing) return;
+    const layers = existing.layerIds.map((id) => config.mapLayers.find((l) => l.id === id)).filter((l): l is MapLayerConfig => !!l);
+    if (!layers.length) return start();
+    await run({ layers, bbox: existing.bbox, minZoom: existing.minZoom, maxZoom: existing.maxZoom });
   };
 
   const remove = async () => {
@@ -139,14 +156,27 @@ export function DownloadPanel({ trip, map, online, onDownloadsChanged }: Props) 
       {existing && (
         <div className={existing.status === "complete" ? "info-box mb" : "warn-box mb"}>
           <div className="row">
-            <strong className="grow">{existing.status === "complete" ? "Available offline" : `Download ${existing.status}`}</strong>
+            <strong className="grow">
+              {existing.status === "complete" ? "Available offline" : interrupted ? "Download interrupted" : `Download ${existing.status}`}
+            </strong>
             <span className="badge green">{formatBytes(existing.bytes)}</span>
           </div>
           <div className="tiny mt">
-            {existing.tilesStored.toLocaleString()} tiles · zoom {existing.minZoom}–{existing.maxZoom} · {existing.photoCount} photos · layers: {existing.layerIds.join(", ")}
+            {existing.tilesStored.toLocaleString()}
+            {existing.status !== "complete" && ` of ${existing.tileCount.toLocaleString()}`} tiles · zoom {existing.minZoom}–{existing.maxZoom} ·{" "}
+            {existing.photoCount} photos · layers: {existing.layerIds.join(", ")}
             {existing.completedAt && <> · {new Date(existing.completedAt).toLocaleString("en-GB")}</>}
           </div>
-          <div className="row mt">
+          {interrupted && (
+            <div className="tiny mt">The app was closed or the screen switched off before it finished. What was stored is kept; resume to fetch the rest.</div>
+          )}
+          {existing.status === "failed" && existing.error && <div className="tiny mt">{existing.error}</div>}
+          <div className="row wrap mt">
+            {(interrupted || existing.status === "failed" || existing.status === "cancelled") && (
+              <button className="small primary" onClick={() => void resume()} disabled={!!progress || !online}>
+                Resume download
+              </button>
+            )}
             <button className="small danger" onClick={() => void remove()} disabled={!!progress}>
               Remove from device
             </button>
@@ -246,7 +276,8 @@ export function DownloadPanel({ trip, map, online, onDownloadsChanged }: Props) 
           </div>
           <div className="row">
             <span className="tiny muted grow">
-              {formatBytes(progress.bytes)} stored{progress.failed ? ` · ${progress.failed} failed` : ""}
+              {formatBytes(progress.bytes)} stored{progress.tilesSkipped ? ` · ${progress.tilesSkipped.toLocaleString()} already on device` : ""}
+              {progress.failed ? ` · ${progress.failed} failed` : ""}
             </span>
             <button className="small" onClick={() => abortRef.current?.abort()}>
               Cancel
@@ -260,6 +291,7 @@ export function DownloadPanel({ trip, map, online, onDownloadsChanged }: Props) 
       )}
       <div className="tiny muted mt">
         The download includes the route, waypoints, photos, notes, checklist and the map tiles for the area above. Everything is stored on this device only.
+        Keep the app open until it finishes; if it is interrupted you can resume and only the missing tiles are fetched.
       </div>
     </div>
   );
