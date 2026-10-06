@@ -18,7 +18,7 @@ shared/   TypeScript types shared by server and client
 server/   Express + SQLite API (auth, trips, routes, waypoints, photos, checklist, tracks, sharing,
           GPX export, proxies for routing / geocoding / elevation / OS tiles)
 web/      React + MapLibre GL client (planner, navigation, PWA, offline store, Capacitor config)
-docs/     Data sources & licensing, Android packaging
+docs/     Data sources & licensing, deployment, Android packaging
 ```
 
 ## Quick start
@@ -43,6 +43,8 @@ NODE_ENV=production SECURE_COOKIES=true npm start
 The server serves the built app and the API from one origin on `PORT` (default 3000). Put it behind an HTTPS reverse proxy (Caddy, nginx, Traefik) — **HTTPS is required** for the service worker, geolocation and install prompt to work on Android, and for the session cookie to be sent with `SECURE_COOKIES=true`. Set `TRUST_PROXY=true` when behind a proxy.
 
 Data lives in `DATA_DIR` (default `server/data`): `trails.sqlite` plus a `photos/` folder. Back up that directory.
+
+To use the app on a phone the server has to be reachable from it. [docs/DEPLOY.md](docs/DEPLOY.md) walks through cheap options that need no domain name: Tailscale on the machine you already have (free, HTTPS included), a small VPS with a raw IP and a free sslip.io certificate, or plain HTTP with the Android APK.
 
 ### Users
 

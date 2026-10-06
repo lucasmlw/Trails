@@ -1,6 +1,8 @@
 # Android
 
-There are two ways to run Trails on an Android phone. Start with the PWA; move to the Capacitor build only if you need tracking to keep running with the screen off.
+**Before anything else: the phone needs to reach your server.** The app on the phone is a client; your trips live in `server/data/` on the machine running `npm start`. If that is currently only your laptop on `localhost`, follow [DEPLOY.md](DEPLOY.md) first — it covers free/cheap options that don't need a domain name, including how to get HTTPS on a raw IP and how to use plain HTTP if you prefer.
+
+There are two ways to run Trails on an Android phone. Start with the PWA; move to the Capacitor build only if you need tracking to keep running with the screen off, or if your server is plain HTTP.
 
 ## Option 1 — Installable PWA (no build tools needed)
 
@@ -42,6 +44,8 @@ npm run cap:open                     # opens Android Studio → Run ▶ on your 
 On first launch the login screen shows a **Server address** field (only in the native shell). Enter the public HTTPS URL of your server, e.g. `https://trails.example.com`. It is stored on the device, and the session uses a bearer token instead of a cookie because the web view's origin (`https://localhost`) differs from the API's. Add that origin to `CORS_ORIGINS` in the server `.env` (it is included in the default).
 
 To bake the server address in at build time instead, set `VITE_API_BASE=https://trails.example.com` when running `npm run build -w web`.
+
+The address can be a Tailscale name (`https://my-laptop.tail1234.ts.net`), an sslip.io name (`https://203-0-113-10.sslip.io`) or, with the two cleartext changes described in [DEPLOY.md → Option 3](DEPLOY.md#option-3--plain-http-on-a-raw-ip-capacitor-apk-only), a plain `http://203.0.113.10:3000`.
 
 ### Permissions
 
